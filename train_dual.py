@@ -16,6 +16,10 @@ import yaml
 from torch.optim import lr_scheduler
 from tqdm import tqdm
 
+import torch.serialization
+
+torch.serialization.add_safe_globals([__import__('numpy')._core.multiarray._reconstruct])
+
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLO root directory
 if str(ROOT) not in sys.path:
@@ -107,7 +111,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
     if pretrained:
         with torch_distributed_zero_first(LOCAL_RANK):
             weights = attempt_download(weights)  # download if not found locally
-        ckpt = torch.load(weights, map_location='cpu')  # load checkpoint to CPU to avoid CUDA memory leak
+        ckpt = torch.load(weights, map_location='cpu', weights_only=False)  # load checkpoint to CPU to avoid CUDA memory leak
         model = Model(cfg or ckpt['model'].yaml, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
         exclude = ['anchor'] if (cfg or hyp.get('anchors')) and not resume else []  # exclude keys
         csd = ckpt['model'].float().state_dict()  # checkpoint state_dict as FP32
@@ -503,7 +507,7 @@ def main(opt, callbacks=Callbacks()):
             with open(opt_yaml, errors='ignore') as f:
                 d = yaml.safe_load(f)
         else:
-            d = torch.load(last, map_location='cpu')['opt']
+            d = torch.load(last, map_location='cpu', weights_only=False)['opt']
         opt = argparse.Namespace(**d)  # replace
         opt.cfg, opt.weights, opt.resume = '', str(last), True  # reinstate
         if is_url(opt_data):
